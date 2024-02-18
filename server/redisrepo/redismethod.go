@@ -61,7 +61,7 @@ func IsUserAuthentic(username, password string) error {
 
 func UpdateContactList(username, contact string) error {
 	zs := &redis.Z{Score: float64(time.Now().Unix()), Member: contact}
-	fmt.Println(zs)
+	log.Println(zs)
 	// redis-cli SCORE is always float or int
 	// SYNTAX: ZADD key SCORE MEMBER
 	// ZADD contacts:username 1661360942123 contact
@@ -81,7 +81,7 @@ func UpdateContactList(username, contact string) error {
 
 func CreateChat(c *model.Chat) (string, error) {
 	chatKey := chatKey()
-	fmt.Println("Chat Key: ", chatKey)
+	// fmt.Println("Chat Key: ", chatKey)
 	value, _ := json.Marshal(c)
 	res, err := redisClient.Do(
 		context.Background(),
@@ -122,7 +122,7 @@ func CreateFetchChatBetweenIndex() {
 		"$.timestamp", "AS", "timestamp", "NUMERIC", "SORTABLE",
 	).Result()
 
-	fmt.Println(res, err)
+	log.Println(res, err)
 }
 
 
