@@ -1,59 +1,81 @@
 package main
 
 import (
+	// "fmt"
 	"fmt"
-	"io"
+	"log"
 	"net/http"
 
-	"golang.org/x/net/websocket"
+	"github.com/gorilla/websocket"
 )
 
-type Server struct {
-	conns map[*websocket.Conn]bool
-}
-
-func NewServer() *Server {
-	return &Server{
-		conns: make(map[*websocket.Conn]bool),
+var (
+	upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
 	}
-}
 
-func (s *Server) handleWS(ws *websocket.Conn) {
-	fmt.Println("New connecting from client: ", ws.RemoteAddr())
-	s.conns[ws] = true
-	s.readLoop(ws)
-}
+	clients          = make(map[*websocket.Conn]bool)
+	broadcastMsg     = make(chan []byte)
+	broadcastMsgType = make(chan int)
+)
 
-func (s *Server) readLoop(ws *websocket.Conn) {
-	buf := make([]byte, 1024)
+func ReadCLientsAndMessage(w http.ResponseWriter, r *http.Request) {
+	fmt.Println(r.Host, r.URL.Query())
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println("Err Read client: ", err)
+		return
+	}
+	defer ws.Close()
+
+	// Đăng ký client mới
+	clients[ws] = true
+
+	// In ra thông báo khi có client kết nối thành công
+	log.Println("Client connected:", ws.RemoteAddr())
+
 	for {
-		n, err := ws.Read(buf)
+		messageType, message, err := ws.ReadMessage()
 		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			fmt.Println(err)
-			continue
+			log.Println(err)
+			delete(clients, ws)
+			break
 		}
-		msg := buf[:n]
-		fmt.Println(string(msg))
-		// ws.Write([]byte("Thank you for the message!!!"))
-		s.broadcast(msg)
+		fmt.Println("Received message:", string(message))
+		// fmt.Println("Received message type:", messageType)
+		broadcastMsg <- message
+		broadcastMsgType <- messageType
 	}
+
 }
 
-func (s *Server) broadcast(b []byte) {
-	for ws := range s.conns {
-		go func(ws *websocket.Conn) {
-			if _, err := ws.Write(b); err != nil {
-				fmt.Println(err)
+func WriteMessageThrowClients() {
+	for {
+		msg := <-broadcastMsg
+		msgType := <-broadcastMsgType
+		fmt.Println("msg: ", string(msg))
+		for client := range clients {
+			err := client.WriteMessage(msgType, msg)
+			if err != nil {
+				log.Printf("error: %v", err)
+				client.Close()
+				delete(clients, client)
 			}
-		}(ws)
+		}
 	}
 }
 
 func main() {
-	server := NewServer()
-	http.Handle("/ws", websocket.Handler(server.handleWS))
-	http.ListenAndServe(":3001", nil)
+	http.HandleFunc("/ws", ReadCLientsAndMessage)
+	go WriteMessageThrowClients()
+
+	log.Println("http server started on :8085")
+	err := http.ListenAndServe(":8085", nil)
+	if err != nil {
+		log.Fatal("ListenAndServe: ", err)
+	}
 }

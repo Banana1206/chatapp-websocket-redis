@@ -7,7 +7,7 @@ go run .\main.go
 
 Run client on browser: 
 ```
-let socket = new WebSocket("ws://localhost:3001/ws")
+let socket = new WebSocket("ws://localhost:8085/ws")
 
 socket.onmessage = function(event) {
     console.log("Received message from server: " + event.data);
